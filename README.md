@@ -28,13 +28,13 @@
 在 DSH Web 的 **Plugins → Add plugin → Install a third-party plugin** 中填入：
 
 ```text
-https://github.com/<你的用户名>/<仓库名>
+https://github.com/Huayuu-z/dsh-philosophy-terms
 ```
 
 或：
 
 ```text
-github:<你的用户名>/<仓库名>
+github:Huayuu-z/dsh-philosophy=terms
 ```
 
 本插件没有构建步骤，也没有额外依赖，`pnpm` 安装后即可加载。安装完成后刷新页面。
