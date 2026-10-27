@@ -1,0 +1,3 @@
+- insert:
+    - id: philosophy-terms
+      name: '@local/philosophy-terms'

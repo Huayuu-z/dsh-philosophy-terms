@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Philosophy Lexicon">
+  <rect width="64" height="64" rx="15" fill="#f1ece2"/>
+  <path d="M14 18.5c0-1.9 1.6-3.5 3.5-3.5H31v33H17.5c-1.9 0-3.5-1.6-3.5-3.5v-26Z" fill="#fffaf0" stroke="#2d2a3a" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M50 18.5c0-1.9-1.6-3.5-3.5-3.5H33v33h13.5c1.9 0 3.5-1.6 3.5-3.5v-26Z" fill="#fffaf0" stroke="#2d2a3a" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M32 15v33" stroke="#2d2a3a" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="22.5" cy="28" r="2.6" fill="#7a68b3"/>
+  <circle cx="41.5" cy="28" r="2.6" fill="#7a68b3"/>
+  <circle cx="32" cy="41" r="2.6" fill="#7a68b3"/>
+  <path d="M25 28h5.5M36.5 28H41.5M32 30.5v7.5" stroke="#7a68b3" stroke-width="1.6" stroke-linecap="round" opacity="0.75"/>
+</svg>
