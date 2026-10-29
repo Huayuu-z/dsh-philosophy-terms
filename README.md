@@ -38,7 +38,9 @@ https://github.com/Huayuu-z/dsh-philosophy-terms
 github:Huayuu-z/dsh-philosophy-terms
 ```
 
-本插件没有构建步骤，也没有额外依赖，`pnpm` 安装后即可加载。安装完成后刷新页面。
+本插件没有构建步骤，也没有额外 npm 依赖，`pnpm` 安装后即可加载。安装完成后刷新页面。
+
+从 GitHub 地址安装需要本机已经安装 **Git**（DSH 会调用 `git ls-remote` 拉取仓库）。如果不想装 Git，直接下载 Release 里的 zip，按下面的「分享给朋友」步骤用本地目录安装即可。
 
 如果只想手动安装，也可以下载 Release 中的 zip，按下面的「分享给朋友」步骤用本地目录安装。
 
