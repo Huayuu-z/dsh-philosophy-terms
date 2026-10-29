@@ -313,6 +313,7 @@ export async function apply(ctx) {
   const concepts = domain.table('concepts')
 
   let dailyJob = null
+  let dailyRerollJob = null
   const analysisJobs = new Map()
   const conceptJobs = new Map()
   const mentionJobs = new Map()
@@ -1053,21 +1054,37 @@ export async function apply(ctx) {
     return callJson(DAILY_SYSTEM, prompt, { maxTokens: 900, temperature: 0.55 })
   }
 
-  async function generateDaily() {
+  /**
+   * Build today's recommendation. `refresh` replaces the stored record while
+   * keeping the same date and excluding the current term as well as every
+   * term already in the lexicon, so "another word" never repeats.
+   */
+  async function generateDaily({ refresh = false } = {}) {
     const existing = daily.get(today())
-    if (existing) return existing
+    if (existing && !refresh) return existing
     if (listBooks().length === 0) {
       throw new AppError('NO_BOOKS', '先输入一本书，词谱才能根据你的阅读生成每日一词。', 409)
     }
     const allTerms = listTerms()
-    const usedSet = new Set(allTerms.map((term) => term.termEn.toLowerCase()))
-    const used = allTerms.map((term) => term.termZh)
+    const usedSet = new Set()
+    const used = []
+    for (const term of allTerms) {
+      usedSet.add(term.termEn.toLowerCase())
+      usedSet.add(term.termZh.toLowerCase())
+      used.push(term.termZh)
+    }
+    if (existing) {
+      usedSet.add(existing.termEn.toLowerCase())
+      usedSet.add(existing.termZh.toLowerCase())
+      if (!used.includes(existing.termZh)) used.push(existing.termZh)
+    }
     let pick = null
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const candidate = await chooseDailyTerm(used)
       const termEn = oneLine(candidate.termEn, 120)
       const termZh = oneLine(candidate.termZh, 80)
-      if (termEn && termZh && !usedSet.has(termEn.toLowerCase())) {
+      const candidateKeys = [termEn.toLowerCase(), termZh.toLowerCase()].filter(Boolean)
+      if (termEn && termZh && candidateKeys.every((key) => !usedSet.has(key))) {
         const slug = oneLine(candidate.sepSlug, 120).toLowerCase().replace(/^https?:\/\/plato\.stanford\.edu\/entries\//, '').replace(/\/$/, '')
         pick = {
           termEn,
@@ -1082,7 +1099,9 @@ export async function apply(ctx) {
       if (attempt === 0) used.push(`${termZh}（${termEn}）`)
     }
     if (!pick) {
-      const fallback = CURATED_FALLBACKS.find((item) => !usedSet.has(item.termEn.toLowerCase()))
+      const fallback = CURATED_FALLBACKS.find((item) =>
+        !usedSet.has(item.termEn.toLowerCase()) && !usedSet.has(item.termZh.toLowerCase()),
+      )
       if (!fallback) throw new AppError('DAILY_EXHAUSTED', '暂时没有可推荐的新词，请先添加更多书目。', 409)
       pick = { ...fallback, why: '与你已经读过的哲学问题相邻，但尚未进入你的词谱。', tradition: '', sourceBookTitle: '' }
     }
@@ -1125,6 +1144,14 @@ export async function apply(ctx) {
     return dailyJob
   }
 
+  async function rerollDaily() {
+    if (!daily.get(today())) return ensureDaily()
+    if (dailyRerollJob) return dailyRerollJob
+    dailyRerollJob = generateDaily({ refresh: true }).finally(() => {
+      dailyRerollJob = null
+    })
+    return dailyRerollJob
+  }
   async function handle(req, res) {
     const url = new URL(req.url || '/', 'http://localhost')
     const path = url.pathname
@@ -1197,7 +1224,32 @@ export async function apply(ctx) {
       }
 
       if (req.method === 'POST' && path === `${API_BASE}/daily`) {
-        await ensureDaily()
+        const body = await readJson(req)
+        if (body.refresh === true) await rerollDaily()
+        else await ensureDaily()
+        sendJson(res, 200, { ok: true, state: buildState() })
+        return
+      }
+
+      if (req.method === 'PATCH' && path.startsWith(`${API_BASE}/books/`)) {
+        const id = decodeURIComponent(path.slice(`${API_BASE}/books/`.length))
+        const book = getBook(id)
+        if (!book) throw new AppError('NOT_FOUND', '找不到这本书。', 404)
+        const body = await readJson(req)
+        const title = oneLine(body.title ?? book.title, 200)
+        if (!title) throw new AppError('BAD_TITLE', '书名不能为空。')
+        const normalized = normalizeTitle(title)
+        const duplicate = listBooks().find((item) => item.id !== id && normalizeTitle(item.title) === normalized)
+        if (duplicate) throw new AppError('DUPLICATE_BOOK', '另一本书已经使用了这个书名。', 409)
+        await books.update(id, (current) => ({
+          ...current,
+          title,
+          author: oneLine(body.author ?? current.author, 160),
+          field: oneLine(body.field ?? current.field, 120),
+          note: oneLine(body.note ?? current.note, 500),
+          normTitle: normalized,
+          updatedAt: now(),
+        }))
         sendJson(res, 200, { ok: true, state: buildState() })
         return
       }

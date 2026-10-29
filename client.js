@@ -15,6 +15,8 @@ window.__ModuleLoader__.load({
       { id: 'not-interested', key: 'rating.not', tone: 'not' },
     ]
 
+    const EMPTY_BOOK_FORM = { title: '', author: '', field: '', note: '' }
+
     const DICT = {
       zh: {
         'panel.label': '哲学词谱',
@@ -47,8 +49,6 @@ window.__ModuleLoader__.load({
         'empty.step3.body': '根据你的阅读与评价，每天推荐一个尚未见过的词。',
         'book.terms': '三个关键词',
         'book.noNote': '暂无领域说明',
-        'book.delete': '删除这本书',
-        'book.deleteTitle': '从词谱中删除',
         'library.confirm': '从词谱中删除《{title}》及其三个词？',
         'term.inBook': '在本书中',
         'term.charCount': '约 {n} 字',
@@ -82,6 +82,8 @@ window.__ModuleLoader__.load({
         'daily.reason': '为什么是它',
         'daily.source': '从《{title}》出发',
         'daily.done': '今日已领取',
+        'daily.reroll': '换一个词',
+        'daily.rerolling': '正在换…',
         'profile.title': '阅读口味',
         'profile.body': '评价只影响推荐，不改变你已经读到的释义。',
         'profile.interested': '感兴趣',
@@ -92,6 +94,24 @@ window.__ModuleLoader__.load({
         'library.title': '我的书目',
         'library.empty': '还没有书目。',
         'library.terms': '{n} 个词',
+        'library.kicker': 'LIBRARY',
+        'library.count': '{n} 本',
+        'library.noAuthor': '未填写作者',
+        'library.editKicker': 'EDIT BOOK',
+        'library.editTitle': '编辑书目',
+        'library.bookTitle': '书名',
+        'library.author': '作者',
+        'library.field': '领域',
+        'library.fieldPlaceholder': '例如：现象学 / 伦理学',
+        'library.note': '备注',
+        'library.notePlaceholder': '一句关于这本书的说明',
+        'library.termsInBook': '收录词条',
+        'library.save': '保存修改',
+        'library.saving': '保存中…',
+        'library.openBook': '打开词条',
+        'library.deleteBook': '删除这本书',
+        'library.selectHint': '从左侧选择一本书。',
+        'library.titleRequired': '书名不能为空。',
         'rail.daily': '今日',
         'notice.existing': '这本书已经在你的词谱里，已为你打开。',
         'notice.rated': '已记录。',
@@ -128,8 +148,6 @@ window.__ModuleLoader__.load({
         'empty.step3.body': 'A new term, chosen from your reading and ratings, once a day.',
         'book.terms': 'Three key terms',
         'book.noNote': 'No field note',
-        'book.delete': 'Delete this book',
-        'book.deleteTitle': 'Delete from lexicon',
         'library.confirm': 'Delete “{title}” and its three terms from the lexicon?',
         'term.inBook': 'In this book',
         'term.charCount': '~{n} characters',
@@ -163,6 +181,8 @@ window.__ModuleLoader__.load({
         'daily.reason': 'Why this one',
         'daily.source': 'From “{title}”',
         'daily.done': 'Drawn today',
+        'daily.reroll': 'Another word',
+        'daily.rerolling': 'Switching…',
         'profile.title': 'Reading taste',
         'profile.body': 'Ratings shape recommendations; they never alter a definition you have already read.',
         'profile.interested': 'Interested',
@@ -173,6 +193,24 @@ window.__ModuleLoader__.load({
         'library.title': 'My books',
         'library.empty': 'No books yet.',
         'library.terms': '{n} terms',
+        'library.kicker': 'LIBRARY',
+        'library.count': '{n} books',
+        'library.noAuthor': 'No author',
+        'library.editKicker': 'EDIT BOOK',
+        'library.editTitle': 'Edit book',
+        'library.bookTitle': 'Title',
+        'library.author': 'Author',
+        'library.field': 'Field',
+        'library.fieldPlaceholder': 'e.g. phenomenology / ethics',
+        'library.note': 'Note',
+        'library.notePlaceholder': 'One line about this book',
+        'library.termsInBook': 'Terms',
+        'library.save': 'Save changes',
+        'library.saving': 'Saving…',
+        'library.openBook': 'Open terms',
+        'library.deleteBook': 'Delete this book',
+        'library.selectHint': 'Choose a book on the left.',
+        'library.titleRequired': 'The title cannot be empty.',
         'rail.daily': 'Today',
         'notice.existing': 'This book is already in your lexicon; it has been opened for you.',
         'notice.rated': 'Saved.',
@@ -190,6 +228,10 @@ window.__ModuleLoader__.load({
         ['path', { d: 'M12 3v4M12 17v4M3 12h4M17 12h4' }],
         ['path', { d: 'm6.3 6.3 2.8 2.8M14.9 14.9l2.8 2.8M17.7 6.3l-2.8 2.8M9.1 14.9l-2.8 2.8' }],
         ['circle', { cx: 12, cy: 12, r: 2.6 }],
+      ],
+      refresh: [
+        ['path', { d: 'M20 11a8 8 0 1 0-2.3 5.7' }],
+        ['path', { d: 'M20 4v7h-7' }],
       ],
       link: [
         ['path', { d: 'M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1' }],
@@ -232,15 +274,6 @@ window.__ModuleLoader__.load({
 
     function charCount(value) {
       return [...String(value || '').replace(/\s+/g, '')].length
-    }
-
-    function formatDate(value) {
-      if (!value) return ''
-      try {
-        return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value))
-      } catch {
-        return ''
-      }
     }
 
     function useLocaleRevision() {
@@ -715,6 +748,207 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function BooksDialog({ state, selectedId, form, saving, error, onSelect, onChange, onSave, onDelete, onOpen, onClose }) {
+      const closeRef = React.useRef(null)
+      const closeHandler = React.useRef(onClose)
+      closeHandler.current = onClose
+      React.useEffect(() => {
+        closeRef.current?.focus()
+        const onKeyDown = (event) => {
+          if (event.key === 'Escape') closeHandler.current()
+        }
+        window.addEventListener('keydown', onKeyDown)
+        return () => window.removeEventListener('keydown', onKeyDown)
+      }, [])
+
+      const selected = state.books.find((book) => book.id === selectedId) || null
+
+      return h(
+        'div',
+        {
+          className: 'phil-modal-backdrop',
+          onMouseDown: (event) => {
+            if (event.target === event.currentTarget) onClose()
+          },
+        },
+        h(
+          'div',
+          {
+            className: 'phil-modal phil-books-modal',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-labelledby': 'phil-books-title',
+          },
+          h(
+            'div',
+            { className: 'phil-modal-head' },
+            h(
+              'div',
+              { className: 'phil-modal-kicker' },
+              h('span', { className: 'phil-kicker' }, translate('library.kicker')),
+              h('span', { className: 'phil-chip' }, translate('library.count', { n: state.books.length })),
+            ),
+            h(
+              'div',
+              { className: 'phil-modal-actions' },
+              h(
+                'button',
+                {
+                  ref: closeRef,
+                  type: 'button',
+                  className: 'phil-modal-close',
+                  onClick: onClose,
+                  'aria-label': translate('concept.close'),
+                  title: translate('concept.close'),
+                },
+                '×',
+              ),
+            ),
+          ),
+          state.books.length === 0
+            ? h(
+                'div',
+                { className: 'phil-books-empty' },
+                h('h2', { id: 'phil-books-title' }, translate('library.title')),
+                h('p', null, translate('library.empty')),
+              )
+            : h(
+                'div',
+                { className: 'phil-books-body' },
+                h(
+                  'div',
+                  { className: 'phil-books-list', role: 'list' },
+                  state.books.map((book) =>
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        role: 'listitem',
+                        key: book.id,
+                        className: `phil-books-row ${book.id === selectedId ? 'is-selected' : ''}`,
+                        onClick: () => onSelect(book),
+                      },
+                      h('span', { className: 'phil-books-row-title' }, book.title),
+                      h(
+                        'span',
+                        { className: 'phil-books-row-meta' },
+                        book.author || translate('library.noAuthor'),
+                        ' · ',
+                        translate('library.terms', { n: book.terms.length }),
+                      ),
+                    ),
+                  ),
+                ),
+                h(
+                  'div',
+                  { className: 'phil-books-editor' },
+                  selected
+                    ? h(
+                        React.Fragment,
+                        null,
+                        h(
+                          'div',
+                          { className: 'phil-books-editor-head' },
+                          h('p', { className: 'phil-eyebrow' }, translate('library.editKicker')),
+                          h('h2', { id: 'phil-books-title' }, translate('library.editTitle')),
+                        ),
+                        h(
+                          'div',
+                          { className: 'phil-books-form' },
+                          h(
+                            'label',
+                            { className: 'phil-form-field' },
+                            h('span', null, translate('library.bookTitle')),
+                            h('input', {
+                              value: form.title,
+                              maxLength: 200,
+                              onChange: (event) => onChange('title', event.target.value),
+                              placeholder: translate('input.titlePlaceholder'),
+                            }),
+                          ),
+                          h(
+                            'div',
+                            { className: 'phil-form-row' },
+                            h(
+                              'label',
+                              { className: 'phil-form-field' },
+                              h('span', null, translate('library.author')),
+                              h('input', {
+                                value: form.author,
+                                maxLength: 160,
+                                onChange: (event) => onChange('author', event.target.value),
+                                placeholder: translate('input.authorPlaceholder'),
+                              }),
+                            ),
+                            h(
+                              'label',
+                              { className: 'phil-form-field' },
+                              h('span', null, translate('library.field')),
+                              h('input', {
+                                value: form.field,
+                                maxLength: 120,
+                                onChange: (event) => onChange('field', event.target.value),
+                                placeholder: translate('library.fieldPlaceholder'),
+                              }),
+                            ),
+                          ),
+                          h(
+                            'label',
+                            { className: 'phil-form-field' },
+                            h('span', null, translate('library.note')),
+                            h('textarea', {
+                              value: form.note,
+                              maxLength: 500,
+                              rows: 3,
+                              onChange: (event) => onChange('note', event.target.value),
+                              placeholder: translate('library.notePlaceholder'),
+                            }),
+                          ),
+                        ),
+                        selected.terms.length
+                          ? h(
+                              'div',
+                              { className: 'phil-books-terms' },
+                              h('span', { className: 'phil-keywords-label' }, translate('library.termsInBook')),
+                              h(
+                                'div',
+                                { className: 'phil-chip-row' },
+                                selected.terms.map((term) => h('span', { className: 'phil-chip', key: term.id }, term.termZh)),
+                              ),
+                            )
+                          : null,
+                        error ? h('p', { className: 'phil-books-error', role: 'alert' }, error) : null,
+                        h(
+                          'div',
+                          { className: 'phil-books-actions' },
+                          h(
+                            'button',
+                            { type: 'button', className: 'phil-primary', onClick: onSave, disabled: saving },
+                            saving ? translate('library.saving') : translate('library.save'),
+                          ),
+                          h(
+                            'button',
+                            { type: 'button', className: 'phil-secondary', onClick: onOpen, disabled: saving },
+                            translate('library.openBook'),
+                          ),
+                          h(
+                            'button',
+                            { type: 'button', className: 'phil-danger-button', onClick: onDelete, disabled: saving },
+                            translate('library.deleteBook'),
+                          ),
+                        ),
+                      )
+                    : h(
+                        'div',
+                        { className: 'phil-books-empty' },
+                        h('p', null, translate('library.selectHint')),
+                      ),
+                ),
+              ),
+        ),
+      )
+    }
+
     function Stat({ label, value, tone }) {
       return h(
         'div',
@@ -724,11 +958,29 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function DailyCard({ state, loading, onGenerate, onConcept }) {
+    function DailyCard({ state, loading, rerolling, onGenerate, onReroll, onConcept }) {
       const daily = state.daily
+      const cardRef = React.useRef(null)
+      const scrollRef = React.useRef(null)
+      React.useEffect(() => {
+        const card = cardRef.current
+        const scroller = scrollRef.current
+        if (!card || !scroller) return undefined
+        const onWheel = (event) => {
+          if (Math.abs(event.deltaY) < 1) return
+          if (scroller.scrollHeight <= scroller.clientHeight + 1) return
+          const atTop = scroller.scrollTop <= 0
+          const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
+          if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) return
+          event.preventDefault()
+          scroller.scrollTop += event.deltaY
+        }
+        card.addEventListener('wheel', onWheel, { passive: false })
+        return () => card.removeEventListener('wheel', onWheel)
+      }, [daily])
       return h(
         'section',
-        { className: 'phil-card phil-daily' },
+        { className: 'phil-card phil-daily', ref: cardRef },
         h(
           'div',
           { className: 'phil-card-head' },
@@ -739,7 +991,24 @@ window.__ModuleLoader__.load({
             h('h2', null, translate('daily.title')),
             h('p', { className: 'phil-card-sub' }, translate('daily.subtitle')),
           ),
-          h('span', { className: 'phil-daily-mark', 'aria-hidden': true }, h(Icon, { name: 'spark', size: 22 })),
+          h(
+            'div',
+            { className: 'phil-daily-head-actions' },
+            daily
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'phil-daily-reroll',
+                    onClick: onReroll,
+                    disabled: rerolling || loading,
+                  },
+                  rerolling ? h('span', { className: 'phil-spinner' }) : h(Icon, { name: 'refresh', size: 13 }),
+                  rerolling ? translate('daily.rerolling') : translate('daily.reroll'),
+                )
+              : null,
+            h('span', { className: 'phil-daily-mark', 'aria-hidden': true }, h(Icon, { name: 'spark', size: 22 })),
+          ),
         ),
         loading
           ? h(
@@ -764,21 +1033,31 @@ window.__ModuleLoader__.load({
                   h('span', { className: 'phil-chip' }, daily.tradition || translate('daily.done')),
                   h('span', { className: 'phil-characters' }, translate('term.charCount', { n: charCount(daily.definition) })),
                 ),
-                h(RichDefinition, {
-                  text: daily.definition,
-                  concepts: uniqueConcepts(daily.mentions, daily),
-                  onConcept,
-                  sourceTerm: null,
-                  className: 'phil-daily-definition',
-                }),
-                daily.reason
-                  ? h(
-                      'div',
-                      { className: 'phil-daily-reason' },
-                      h('span', { className: 'phil-inbook-label' }, translate('daily.reason')),
-                      h('p', null, daily.reason),
-                    )
-                  : null,
+                h(
+                  'div',
+                  {
+                    className: 'phil-daily-scroll',
+                    ref: scrollRef,
+                    tabIndex: 0,
+                    role: 'region',
+                    'aria-label': translate('daily.title'),
+                  },
+                  h(RichDefinition, {
+                    text: daily.definition,
+                    concepts: uniqueConcepts(daily.mentions, daily),
+                    onConcept,
+                    sourceTerm: null,
+                    className: 'phil-daily-definition',
+                  }),
+                  daily.reason
+                    ? h(
+                        'div',
+                        { className: 'phil-daily-reason' },
+                        h('span', { className: 'phil-inbook-label' }, translate('daily.reason')),
+                        h('p', null, daily.reason),
+                      )
+                    : null,
+                ),
                 h(
                   'div',
                   { className: 'phil-daily-foot' },
@@ -859,52 +1138,6 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function LibraryCard({ state, selectedId, onSelect, onDelete }) {
-      return h(
-        'section',
-        { className: 'phil-card phil-library' },
-        h('h2', { className: 'phil-rail-title' }, translate('library.title')),
-        !state.books.length
-          ? h('p', { className: 'phil-hint' }, translate('library.empty'))
-          : h(
-              'div',
-              { className: 'phil-library-list' },
-              state.books.map((book) =>
-                h(
-                  'div',
-                  {
-                    key: book.id,
-                    className: `phil-library-row ${selectedId === book.id ? 'is-selected' : ''}`,
-                  },
-                  h(
-                    'button',
-                    { type: 'button', className: 'phil-library-main', onClick: () => onSelect(book.id) },
-                    h('span', { className: 'phil-library-title' }, book.title),
-                    h(
-                      'span',
-                      { className: 'phil-library-meta' },
-                      formatDate(book.createdAt),
-                      ' · ',
-                      translate('library.terms', { n: book.terms.length }),
-                    ),
-                  ),
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'phil-icon-button',
-                      title: translate('book.delete'),
-                      'aria-label': `${translate('book.deleteTitle')}: ${book.title}`,
-                      onClick: () => onDelete(book),
-                    },
-                    h(Icon, { name: 'trash', size: 15 }),
-                  ),
-                ),
-              ),
-            ),
-      )
-    }
-
     function HowItWorks() {
       const steps = [
         ['empty.step1.title', 'empty.step1.body'],
@@ -958,6 +1191,43 @@ window.__ModuleLoader__.load({
         gap: 16px;
         margin-bottom: 14px;
       }
+      .phil-top-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: none;
+      }
+      .phil-top-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--dsw-alias-border-l1);
+        border-radius: 999px;
+        background: var(--dsw-alias-bg-layer-1);
+        color: var(--dsw-alias-label-secondary);
+        font: inherit;
+        font-size: 11.5px;
+        padding: 6px 10px 6px 9px;
+        cursor: pointer;
+        transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+      }
+      .phil-top-button:hover:not(:disabled) {
+        color: var(--dsw-alias-brand-primary);
+        border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 42%, var(--dsw-alias-border-l1));
+        background: color-mix(in srgb, var(--dsw-alias-brand-primary) 5%, var(--dsw-alias-bg-layer-1));
+      }
+      .phil-top-button:disabled { opacity: 0.45; cursor: default; }
+      .phil-top-count {
+        display: inline-grid;
+        place-items: center;
+        min-width: 17px;
+        height: 17px;
+        padding: 0 4px;
+        border-radius: 999px;
+        background: var(--dsw-alias-bg-layer-2);
+        font-size: 9.5px;
+        font-variant-numeric: tabular-nums;
+      }
       .phil-kicker, .phil-eyebrow {
         margin: 0;
         font-size: 10px;
@@ -994,10 +1264,19 @@ window.__ModuleLoader__.load({
         align-items: stretch;
         margin-top: 22px;
         padding: 8px;
-        border: 1px solid var(--dsw-alias-border-l1);
+        border: 1.5px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 52%, var(--dsw-alias-border-l1));
         border-radius: 16px;
         background: var(--dsw-alias-bg-layer-1);
-        box-shadow: 0 1px 2px color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
+        box-shadow:
+          0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent),
+          0 1px 2px color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
+        transition: border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+      .phil-search:focus-within {
+        border-color: var(--dsw-alias-brand-primary);
+        box-shadow:
+          0 0 0 4px color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent),
+          0 1px 2px color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
       }
       .phil-field {
         display: flex;
@@ -1143,6 +1422,33 @@ window.__ModuleLoader__.load({
           var(--dsw-alias-bg-layer-1);
         border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, var(--dsw-alias-border-l1));
       }
+      .phil-daily-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex: none;
+      }
+      .phil-daily-reroll {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid var(--dsw-alias-border-l1);
+        border-radius: 999px;
+        background: transparent;
+        color: var(--dsw-alias-label-secondary);
+        font: inherit;
+        font-size: 10.5px;
+        padding: 5px 8px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .phil-daily-reroll:hover:not(:disabled) {
+        color: var(--dsw-alias-brand-primary);
+        border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 38%, var(--dsw-alias-border-l1));
+        background: color-mix(in srgb, var(--dsw-alias-brand-primary) 6%, transparent);
+      }
+      .phil-daily-reroll:disabled { cursor: default; opacity: 0.65; }
+      .phil-daily-reroll .phil-spinner { width: 12px; height: 12px; }
       .phil-daily-mark {
         flex: none;
         display: grid;
@@ -1168,6 +1474,29 @@ window.__ModuleLoader__.load({
       }
       .phil-daily-termline span { font-size: 12px; color: var(--dsw-alias-label-secondary); letter-spacing: 0.02em; }
       .phil-daily-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+      .phil-daily-scroll {
+        max-height: 300px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        margin-top: 2px;
+        padding-right: 7px;
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in srgb, var(--dsw-alias-label-secondary) 32%, transparent) transparent;
+      }
+      .phil-daily-scroll:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, transparent);
+        outline-offset: 3px;
+        border-radius: 6px;
+      }
+      .phil-daily-scroll::-webkit-scrollbar { width: 6px; }
+      .phil-daily-scroll::-webkit-scrollbar-track { background: transparent; }
+      .phil-daily-scroll::-webkit-scrollbar-thumb {
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--dsw-alias-label-secondary) 30%, transparent);
+      }
+      .phil-daily-scroll::-webkit-scrollbar-thumb:hover {
+        background: color-mix(in srgb, var(--dsw-alias-label-secondary) 48%, transparent);
+      }
       .phil-daily-definition { margin-top: 12px; font-size: 13px; line-height: 1.9; }
       .phil-daily-reason, .phil-inbook {
         margin-top: 13px;
@@ -1465,54 +1794,6 @@ window.__ModuleLoader__.load({
       .phil-traditions { margin-top: 13px; }
       .phil-chip-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
       .phil-hint { margin: 10px 0 0; font-size: 11px; line-height: 1.7; color: var(--dsw-alias-label-secondary); }
-      .phil-library-list { margin-top: 9px; display: flex; flex-direction: column; gap: 3px; max-height: 330px; overflow: auto; }
-      .phil-library-row {
-        display: flex;
-        align-items: center;
-        gap: 2px;
-        border-radius: 9px;
-      }
-      .phil-library-row:hover { background: var(--dsw-alias-bg-layer-2); }
-      .phil-library-row.is-selected { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent); }
-      .phil-library-main {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 2px;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        text-align: left;
-        padding: 8px 7px;
-        cursor: pointer;
-      }
-      .phil-library-title {
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 12.5px;
-        font-weight: 560;
-      }
-      .phil-library-meta { font-size: 10px; color: var(--dsw-alias-label-secondary); }
-      .phil-icon-button {
-        flex: none;
-        display: grid;
-        place-items: center;
-        width: 27px;
-        height: 27px;
-        border: 0;
-        border-radius: 7px;
-        background: transparent;
-        color: var(--dsw-alias-label-secondary);
-        cursor: pointer;
-        opacity: 0;
-      }
-      .phil-library-row:hover .phil-icon-button, .phil-library-row:focus-within .phil-icon-button { opacity: 1; }
-      .phil-icon-button:hover { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 9%, transparent); }
       .phil-how {
         border: 1px solid var(--dsw-alias-border-l1);
         border-radius: 18px;
@@ -1755,6 +2036,171 @@ window.__ModuleLoader__.load({
         .phil-modal-body { padding: 18px 17px 21px; }
         .phil-modal-title-row h2 { font-size: 25px; }
       }
+      .phil-books-modal { width: min(900px, 100%); }
+      .phil-books-body {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        max-height: min(76vh, 860px);
+        min-height: 430px;
+      }
+      .phil-books-list {
+        border-right: 1px solid var(--dsw-alias-border-l1);
+        padding: 10px;
+        overflow: auto;
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 55%, transparent);
+      }
+      .phil-books-row {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+        width: 100%;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        padding: 10px 10px 9px;
+        margin-bottom: 3px;
+        cursor: pointer;
+      }
+      .phil-books-row:hover { background: var(--dsw-alias-bg-layer-2); }
+      .phil-books-row.is-selected {
+        border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, var(--dsw-alias-border-l1));
+        background: color-mix(in srgb, var(--dsw-alias-brand-primary) 7%, transparent);
+      }
+      .phil-books-row-title {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 12.5px;
+        font-weight: 580;
+      }
+      .phil-books-row-meta {
+        font-size: 10px;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .phil-books-editor {
+        padding: 23px 26px 26px;
+        overflow: auto;
+      }
+      .phil-books-editor-head h2 {
+        margin: 5px 0 0;
+        font-family: ui-serif, Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+        font-size: 25px;
+        font-weight: 560;
+      }
+      .phil-books-form {
+        display: flex;
+        flex-direction: column;
+        gap: 13px;
+        margin-top: 20px;
+      }
+      .phil-form-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 11px;
+      }
+      .phil-form-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+      }
+      .phil-form-field > span {
+        font-size: 10px;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .phil-form-field input,
+      .phil-form-field textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--dsw-alias-border-l1);
+        border-radius: 9px;
+        background: var(--dsw-alias-bg-layer-2);
+        color: var(--dsw-alias-label-primary);
+        font: inherit;
+        font-size: 12.5px;
+        line-height: 1.6;
+        padding: 9px 11px;
+        outline: 0;
+        resize: vertical;
+      }
+      .phil-form-field input:focus,
+      .phil-form-field textarea:focus {
+        border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, var(--dsw-alias-border-l1));
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent);
+      }
+      .phil-books-terms { margin-top: 17px; }
+      .phil-books-error {
+        margin: 13px 0 0;
+        font-size: 11.5px;
+        line-height: 1.65;
+        color: var(--dsw-alias-state-error-primary);
+      }
+      .phil-books-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid var(--dsw-alias-border-l1);
+      }
+      .phil-books-actions .phil-primary { min-height: 36px; padding: 0 14px; }
+      .phil-secondary,
+      .phil-danger-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 36px;
+        border: 1px solid var(--dsw-alias-border-l1);
+        border-radius: 9px;
+        background: transparent;
+        color: var(--dsw-alias-label-secondary);
+        font: inherit;
+        font-size: 12px;
+        padding: 0 12px;
+        cursor: pointer;
+      }
+      .phil-secondary:hover { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
+      .phil-danger-button {
+        margin-left: auto;
+        color: var(--dsw-alias-state-error-primary);
+        border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 26%, var(--dsw-alias-border-l1));
+      }
+      .phil-danger-button:hover {
+        background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);
+      }
+      .phil-secondary:disabled,
+      .phil-danger-button:disabled { opacity: 0.5; cursor: default; }
+      .phil-books-empty {
+        padding: 48px 26px;
+        text-align: center;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .phil-books-empty h2 { margin: 0 0 8px; color: var(--dsw-alias-label-primary); font-size: 20px; }
+      .phil-books-empty p { margin: 0; font-size: 12.5px; line-height: 1.7; }
+      @media (max-width: 760px) {
+        .phil-books-body {
+          grid-template-columns: 1fr;
+          max-height: 78vh;
+          min-height: 0;
+        }
+        .phil-books-list {
+          max-height: 170px;
+          border-right: 0;
+          border-bottom: 1px solid var(--dsw-alias-border-l1);
+        }
+        .phil-books-editor { padding: 19px 17px 22px; }
+        .phil-form-row { grid-template-columns: 1fr; }
+        .phil-danger-button { margin-left: 0; }
+      }
       @media (max-width: 980px) {
         .phil-grid, .phil-skeleton { grid-template-columns: 1fr; }
         .phil-rail { position: static; }
@@ -1764,6 +2210,9 @@ window.__ModuleLoader__.load({
       }
       @media (max-width: 620px) {
         .phil-wrap { padding: 22px 16px 70px; }
+        .phil-topline { flex-direction: column; align-items: flex-start; gap: 8px; }
+        .phil-top-actions { width: 100%; justify-content: space-between; }
+        .phil-daily-scroll { max-height: 260px; }
         .phil-search { grid-template-columns: 1fr; }
         .phil-field + .phil-field { border-left: 0; border-top: 1px solid var(--dsw-alias-border-l1); }
         .phil-term { padding: 17px 15px 14px; }
@@ -1782,6 +2231,7 @@ window.__ModuleLoader__.load({
       const [selectedId, setSelectedId] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
       const [dailyLoading, setDailyLoading] = React.useState(false)
+      const [dailyRefreshing, setDailyRefreshing] = React.useState(false)
       const [error, setError] = React.useState(null)
       const [notice, setNotice] = React.useState('')
       const [stage, setStage] = React.useState(0)
@@ -1789,6 +2239,11 @@ window.__ModuleLoader__.load({
       const [conceptDialog, setConceptDialog] = React.useState(null)
       const [conceptHistory, setConceptHistory] = React.useState([])
       const [mentionsLoading, setMentionsLoading] = React.useState(false)
+      const [booksOpen, setBooksOpen] = React.useState(false)
+      const [editBookId, setEditBookId] = React.useState(null)
+      const [bookForm, setBookForm] = React.useState(EMPTY_BOOK_FORM)
+      const [bookSaving, setBookSaving] = React.useState(false)
+      const [bookError, setBookError] = React.useState(null)
       const inputRef = React.useRef(null)
       const conceptCache = React.useRef(new Map())
       const mentionRequested = React.useRef(new Set())
@@ -1855,6 +2310,88 @@ window.__ModuleLoader__.load({
           cancelled = true
         }
       }, [selectedBook?.id])
+
+      function selectBookForEdit(book) {
+        if (!book) {
+          setEditBookId(null)
+          setBookForm(EMPTY_BOOK_FORM)
+          return
+        }
+        setEditBookId(book.id)
+        setBookForm({
+          title: book.title || '',
+          author: book.author || '',
+          field: book.field || '',
+          note: book.note || '',
+        })
+        setBookError(null)
+      }
+
+      function openBooksDialog() {
+        setBooksOpen(true)
+        selectBookForEdit(selectedBook || state?.books[0] || null)
+      }
+
+      function closeBooksDialog() {
+        setBooksOpen(false)
+        setBookError(null)
+      }
+
+      function changeBookField(field, value) {
+        setBookForm((current) => ({ ...current, [field]: value }))
+      }
+
+      async function saveBook() {
+        const book = state?.books.find((item) => item.id === editBookId)
+        if (!book || bookSaving) return
+        if (!bookForm.title.trim()) {
+          setBookError(translate('library.titleRequired'))
+          return
+        }
+        setBookSaving(true)
+        setBookError(null)
+        try {
+          const payload = await request(`/books/${encodeURIComponent(book.id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(bookForm),
+          })
+          setState(payload.state)
+          const updated = payload.state.books.find((item) => item.id === book.id)
+          if (updated) selectBookForEdit(updated)
+        } catch (caught) {
+          setBookError(caught.message)
+        } finally {
+          setBookSaving(false)
+        }
+      }
+
+      async function deleteBookFromDialog() {
+        const book = state?.books.find((item) => item.id === editBookId)
+        if (!book || bookSaving) return
+        if (!window.confirm(translate('library.confirm', { title: book.title }))) return
+        setBookSaving(true)
+        setBookError(null)
+        try {
+          const payload = await request(`/books/${encodeURIComponent(book.id)}`, { method: 'DELETE' })
+          setState(payload.state)
+          if (selectedId === book.id) {
+            const nextSelected = payload.state.books[0]
+            setSelectedId(nextSelected ? nextSelected.id : null)
+          }
+          const next = payload.state.books.find((item) => item.id === selectedId) || payload.state.books[0] || null
+          selectBookForEdit(next)
+        } catch (caught) {
+          setBookError(caught.message)
+        } finally {
+          setBookSaving(false)
+        }
+      }
+
+      function openBookFromDialog() {
+        if (!editBookId) return
+        setSelectedId(editBookId)
+        closeBooksDialog()
+      }
 
       function openConcept(ref, sourceTerm, options = {}) {
         if (!ref) return
@@ -1988,17 +2525,20 @@ window.__ModuleLoader__.load({
         }
       }
 
-      async function removeBook(book) {
-        if (!window.confirm(translate('library.confirm', { title: book.title }))) return
+      async function rerollDaily() {
+        if (dailyLoading || dailyRefreshing) return
+        setDailyRefreshing(true)
+        setError(null)
         try {
-          const payload = await request(`/books/${encodeURIComponent(book.id)}`, { method: 'DELETE' })
+          const payload = await request('/daily', {
+            method: 'POST',
+            body: JSON.stringify({ refresh: true }),
+          })
           setState(payload.state)
-          if (selectedId === book.id) {
-            const next = payload.state.books[0]
-            setSelectedId(next ? next.id : null)
-          }
         } catch (caught) {
           setError(caught.message)
+        } finally {
+          setDailyRefreshing(false)
         }
       }
 
@@ -2018,7 +2558,24 @@ window.__ModuleLoader__.load({
               'div',
               { className: 'phil-topline' },
               h('p', { className: 'phil-kicker' }, translate('hero.kicker')),
-              h('span', { className: 'phil-date' }, state?.today || ''),
+              h(
+                'div',
+                { className: 'phil-top-actions' },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'phil-top-button',
+                    onClick: openBooksDialog,
+                    disabled: !state,
+                    'aria-label': translate('library.title'),
+                  },
+                  h(Icon, { name: 'book', size: 14 }),
+                  translate('library.title'),
+                  h('span', { className: 'phil-top-count' }, String(state?.books.length || 0)),
+                ),
+                h('span', { className: 'phil-date' }, state?.today || ''),
+              ),
             ),
             h('h1', null, translate('hero.title')),
             h('p', { className: 'phil-hero-sub' }, translate('hero.subtitle')),
@@ -2132,12 +2689,6 @@ window.__ModuleLoader__.load({
                               mentionsLoading ? ` · ${translate('term.mentionsLoading')}` : '',
                             ),
                           ),
-                          h(
-                            'button',
-                            { type: 'button', className: 'phil-delete', onClick: () => removeBook(selectedBook) },
-                            h(Icon, { name: 'trash', size: 14 }),
-                            translate('book.delete'),
-                          ),
                         ),
                         h(
                           'div',
@@ -2159,14 +2710,15 @@ window.__ModuleLoader__.load({
                 h(
                   'aside',
                   { className: 'phil-rail' },
-                  h(DailyCard, { state, loading: dailyLoading, onGenerate: drawDaily, onConcept: openConcept }),
-                  h(ProfileCard, { state }),
-                  h(LibraryCard, {
+                  h(DailyCard, {
                     state,
-                    selectedId: selectedBook?.id || null,
-                    onSelect: setSelectedId,
-                    onDelete: removeBook,
+                    loading: dailyLoading,
+                    rerolling: dailyRefreshing,
+                    onGenerate: drawDaily,
+                    onReroll: rerollDaily,
+                    onConcept: openConcept,
                   }),
+                  h(ProfileCard, { state }),
                 ),
               )
             : null,
@@ -2180,6 +2732,21 @@ window.__ModuleLoader__.load({
               onRetry: retryConcept,
               onRefresh: refreshConcept,
               onNavigate: openConcept,
+            })
+          : null,
+        booksOpen && state
+          ? h(BooksDialog, {
+              state,
+              selectedId: editBookId,
+              form: bookForm,
+              saving: bookSaving,
+              error: bookError,
+              onSelect: selectBookForEdit,
+              onChange: changeBookField,
+              onSave: saveBook,
+              onDelete: deleteBookFromDialog,
+              onOpen: openBookFromDialog,
+              onClose: closeBooksDialog,
             })
           : null,
       )
