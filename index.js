@@ -72,6 +72,26 @@ const isConceptRecord = (value) =>
   (isNonEmpty(value.termEn) || isNonEmpty(value.termZh)) &&
   isNonEmpty(value.definition)
 
+const isFavoriteRecord = (value) =>
+  value &&
+  typeof value === 'object' &&
+  isNonEmpty(value.key) &&
+  (value.kind === 'term' || value.kind === 'daily') &&
+  isNonEmpty(value.title) &&
+  isNonEmpty(value.definition) &&
+  typeof value.createdAt === 'string'
+
+const isWeeklyRecord = (value) =>
+  value &&
+  typeof value === 'object' &&
+  /^\d{4}-\d{2}-\d{2}$/.test(value.week) &&
+  value.book &&
+  isNonEmpty(value.book.title) &&
+  isNonEmpty(value.book.summary) &&
+  value.philosopher &&
+  isNonEmpty(value.philosopher.name) &&
+  isNonEmpty(value.philosopher.intro)
+
 /** Stable cache key for a queried concept, independent of which surface opened it. */
 function conceptKeyOf(termEn, termZh) {
   const ascii = String(termEn || '')
@@ -102,6 +122,8 @@ const SPEC = {
     terms: table(isTermRecord),
     daily: table(isDailyRecord),
     concepts: table(isConceptRecord),
+    favorites: table(isFavoriteRecord),
+    weekly: table(isWeeklyRecord),
   },
 }
 
@@ -124,6 +146,13 @@ const DAILY_SYSTEM = [
   '你只输出一个合法的 JSON 对象，不输出 markdown、解释或前后缀。',
 ].join('\n')
 
+const WEEKLY_SYSTEM = [
+  '你是一位哲学阅读顾问，熟悉西方哲学史、各思想传统和中文哲学译名。',
+  '你根据读者已经读过的书、术语和兴趣评价，推荐一本他可能喜欢的哲学书和一位哲学家。',
+  '推荐必须具体、可解释，避免推荐读者已经读过的书或已经推荐过的哲学家。',
+  '你只输出一个合法的 JSON 对象，不输出 markdown、解释或前后缀。',
+].join('\n')
+
 const CURATED_FALLBACKS = [
   { termEn: 'Recognition', termZh: '承认', sepSlug: 'recognition' },
   { termEn: 'Epistemic Injustice', termZh: '认识论不义', sepSlug: 'epistemic-injustice' },
@@ -138,6 +167,15 @@ const CURATED_FALLBACKS = [
 
 const now = () => new Date().toISOString()
 const today = () => DAY_FORMATTER.format(new Date())
+
+/** Monday of the current Asia/Shanghai week, used as the weekly recommendation key. */
+function weekKey() {
+  const [year, month, day] = today().split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  const weekday = date.getUTCDay() || 7
+  date.setUTCDate(date.getUTCDate() - weekday + 1)
+  return date.toISOString().slice(0, 10)
+}
 
 function normalizeTitle(value) {
   return String(value || '')
@@ -311,9 +349,12 @@ export async function apply(ctx) {
   const terms = domain.table('terms')
   const daily = domain.table('daily')
   const concepts = domain.table('concepts')
+  const favorites = domain.table('favorites')
+  const weekly = domain.table('weekly')
 
   let dailyJob = null
   let dailyRerollJob = null
+  let weeklyJob = null
   const analysisJobs = new Map()
   const conceptJobs = new Map()
   const mentionJobs = new Map()
@@ -350,7 +391,12 @@ export async function apply(ctx) {
     return {
       books: allBooks,
       daily: daily.get(today()) || null,
+      favorites: [...favorites.entries()]
+        .map(([, favorite]) => favorite)
+        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
+      weekly: weekly.get(weekKey()) || null,
       today: today(),
+      week: weekKey(),
       stats,
     }
   }
@@ -366,6 +412,46 @@ export async function apply(ctx) {
     for (const termId of book.termIds) await terms.delete(termId)
     await books.delete(id)
     return true
+  }
+
+  async function addFavorite(kind, termId) {
+    if (kind === 'term') {
+      const term = getTerm(termId)
+      if (!term) throw new AppError('NOT_FOUND', '找不到这个词。', 404)
+      const book = getBook(term.bookId)
+      const key = `term:${term.id}`
+      if (favorites.get(key)) return
+      await favorites.put(key, {
+        key,
+        kind: 'term',
+        refId: term.id,
+        title: term.termZh,
+        termEn: term.termEn,
+        definition: term.definition,
+        sourceBook: book?.title || '',
+        sourceBookId: term.bookId,
+        createdAt: now(),
+      })
+      return
+    }
+    if (kind === 'daily') {
+      const record = daily.get(today())
+      if (!record) throw new AppError('NO_DAILY', '今天还没有每日一词。', 409)
+      const key = `daily:${record.date}:${record.termEn.toLowerCase()}`
+      if (favorites.get(key)) return
+      await favorites.put(key, {
+        key,
+        kind: 'daily',
+        refId: record.date,
+        title: record.termZh,
+        termEn: record.termEn,
+        definition: record.definition,
+        sourceBook: record.sourceBook || '',
+        createdAt: now(),
+      })
+      return
+    }
+    throw new AppError('BAD_FAVORITE', '收藏类型必须是 term 或 daily。')
   }
 
   async function callModel(system, user, { maxTokens = 2200, temperature = 0.4 } = {}) {
@@ -1152,6 +1238,171 @@ export async function apply(ctx) {
     })
     return dailyRerollJob
   }
+
+  async function chooseWeekly(profile, blockedBooks, blockedPhilosophers) {
+    const prompt = [
+      '读者档案（JSON）：',
+      JSON.stringify(profile).slice(0, 12000),
+      '',
+      `已经读过的书（不要推荐）：${blockedBooks.length ? blockedBooks.join('、') : '无'}。`,
+      `已经推荐过的哲学家（不要重复）：${blockedPhilosophers.length ? blockedPhilosophers.join('、') : '无'}。`,
+      '',
+      '请推荐一本读者可能感兴趣、但还没有读过的哲学书，以及一位他可能感兴趣的哲学家。推荐原则：',
+      '1. 优先靠近标记为 interested 的术语和思想传统，避开 not-interested 的方向。',
+      '2. 书要真正可读、有明确的哲学论证，不要推荐泛泛的入门鸡汤；说明为什么它接得上读者现在的阅读。',
+      '3. 哲学家要选有明确 SEP 词条、思想可被概括的人物；优先与读者的书目或兴趣相邻，但不要重复已经推荐过的人。',
+      '4. 不要推荐读者书单里已有的书。',
+      '',
+      '输出 JSON：',
+      '{"book":{"title":"书名","author":"作者","why":"为什么推荐给这位读者（60-120字）","tradition":"思想传统"},"philosopher":{"name":"中文名","nameEn":"英文名","sepSlug":"sep-entry-slug 或空字符串","why":"为什么推荐这位哲学家（60-120字）","tradition":"思想传统"}}',
+    ].join('\n')
+    return callJson(WEEKLY_SYSTEM, prompt, { maxTokens: 1000, temperature: 0.55 })
+  }
+
+  async function writeWeekly(book, philosopher, sep) {
+    const sourceBlock = sep
+      ? [
+          `SEP 词条：${sep.title || philosopher.nameEn}`,
+          `URL：${sep.url}`,
+          'SEP 原文节选：',
+          '"""',
+          sep.text.slice(0, 12000),
+          '"""',
+        ].join('\n')
+      : 'SEP 直连检索失败。请依据你掌握的哲学史写作，不要编造具体引文。'
+
+    const prompt = [
+      '你正在为一个中文哲学阅读词谱写“本周推荐”。',
+      `本周之书：《${book.title}》${book.author ? `（${book.author}）` : ''}${book.tradition ? `，${book.tradition}` : ''}`,
+      `推荐理由：${book.why}`,
+      `本周哲学家：${philosopher.name}（${philosopher.nameEn}）${philosopher.tradition ? `，${philosopher.tradition}` : ''}`,
+      `推荐理由：${philosopher.why}`,
+      '',
+      sourceBlock,
+      '',
+      '写作任务：',
+      '1. book.summary：250–500 个汉字，概括这本书讨论的核心问题、论证路径和阅读入口；不要写成营销文案。',
+      '2. philosopher.intro：250–500 个汉字，介绍哲学家的时代、问题意识和思想位置；不要只列生平。',
+      '3. philosopher.mainIdeas：3–5 条，每条 30–60 字，概括其主要思想。',
+      '4. philosopher.relation：30–80 字，说明这位哲学家与读者当前阅读的关系。',
+      '5. 不要编造 SEP 未支持的引文；可以用中文哲学语言转述。',
+      '',
+      '输出 JSON：',
+      '{"book":{"summary":"250-500个汉字"},"philosopher":{"intro":"250-500个汉字","mainIdeas":["30-60字","30-60字","30-60字"],"relation":"30-80字"}}',
+    ].join('\n')
+
+    let data = await callJson(WRITER_SYSTEM, prompt, { maxTokens: 3200, temperature: 0.45 })
+    let bookSummary = trimToRange(data.book?.summary ?? data.bookSummary ?? data.summary)
+    let intro = trimToRange(data.philosopher?.intro ?? data.philosopherIntro ?? data.intro)
+    if (charCount(bookSummary) < 150 || charCount(intro) < 150) {
+      ctx.logger.warn(`philosophy-terms: weekly response was short (book ${charCount(bookSummary)}, philosopher ${charCount(intro)}, keys ${Object.keys(data).join(',')})`)
+      const retryPrompt = `${prompt}\n\n你上一次写得太短（书籍 ${charCount(bookSummary)} 字，哲学家 ${charCount(intro)} 字）。请把两部分都扩写到 300–500 字，仍然只输出同样的 JSON。`
+      data = await callJson(WRITER_SYSTEM, retryPrompt, { maxTokens: 3400, temperature: 0.45 })
+      bookSummary = trimToRange(data.book?.summary ?? data.bookSummary ?? data.summary)
+      intro = trimToRange(data.philosopher?.intro ?? data.philosopherIntro ?? data.intro)
+    }
+    if (charCount(bookSummary) < 150 || charCount(intro) < 150) {
+      throw new AppError(
+        'WEEKLY_TOO_SHORT',
+        `本周推荐的书籍或哲学家介绍过短（书籍 ${charCount(bookSummary)} 字，哲学家 ${charCount(intro)} 字），请稍后重试。`,
+        502,
+      )
+    }
+    const mainIdeas = (Array.isArray(data.philosopher?.mainIdeas) ? data.philosopher.mainIdeas : [])
+      .map((item) => oneLine(item, 120))
+      .filter(Boolean)
+      .slice(0, 5)
+    return {
+      bookSummary,
+      intro,
+      mainIdeas: mainIdeas.length ? mainIdeas : [oneLine(philosopher.why, 120)].filter(Boolean),
+      relation: oneLine(data.philosopher?.relation, 240),
+      sourceStatus: sep ? 'sep' : 'fallback',
+      sepUrl: sep?.url || '',
+      sepTitle: sep?.title || '',
+    }
+  }
+
+  async function generateWeekly() {
+    const key = weekKey()
+    const existing = weekly.get(key)
+    if (existing) return existing
+    if (listBooks().length === 0) {
+      throw new AppError('NO_BOOKS', '先输入一本书，才能生成每周推荐。', 409)
+    }
+    const profile = buildProfile()
+    const previous = [...weekly.entries()].map(([, record]) => record)
+    const blockedBooks = [
+      ...listBooks().map((book) => book.title),
+      ...previous.map((record) => record.book?.title).filter(Boolean),
+    ]
+    const blockedPhilosophers = previous.map((record) => record.philosopher?.name).filter(Boolean)
+
+    let choice = null
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const candidate = await chooseWeekly(profile, blockedBooks, blockedPhilosophers)
+      const book = {
+        title: oneLine(candidate.book?.title, 200),
+        author: oneLine(candidate.book?.author, 160),
+        why: oneLine(candidate.book?.why, 400),
+        tradition: oneLine(candidate.book?.tradition, 80),
+      }
+      const philosopher = {
+        name: oneLine(candidate.philosopher?.name, 120),
+        nameEn: oneLine(candidate.philosopher?.nameEn, 120),
+        sepSlug: oneLine(candidate.philosopher?.sepSlug, 120).toLowerCase().replace(/^https?:\/\/plato\.stanford\.edu\/entries\//, '').replace(/\/$/, ''),
+        why: oneLine(candidate.philosopher?.why, 400),
+        tradition: oneLine(candidate.philosopher?.tradition, 80),
+      }
+      const text = normalizeTitle(book.title)
+      const bookBlocked = blockedBooks.some((title) => normalizeTitle(title) === text)
+      const philosopherBlocked = blockedPhilosophers.some((name) => name === philosopher.name)
+      if (book.title && book.author && philosopher.name && philosopher.nameEn && text && !bookBlocked && !philosopherBlocked) {
+        choice = { book, philosopher }
+        break
+      }
+      if (book.title) blockedBooks.push(book.title)
+      if (philosopher.name) blockedPhilosophers.push(philosopher.name)
+    }
+    if (!choice) {
+      throw new AppError('WEEKLY_EXHAUSTED', '暂时没有合适的每周推荐，请稍后再试。', 409)
+    }
+
+    let sep = null
+    try {
+      sep = await lookupSep(choice.philosopher)
+    } catch (error) {
+      ctx.logger.warn(`philosophy-terms: weekly SEP lookup failed for ${choice.philosopher.nameEn}: ${String(error)}`)
+    }
+    const written = await writeWeekly(choice.book, choice.philosopher, sep)
+    const record = {
+      week: key,
+      book: { ...choice.book, summary: written.bookSummary },
+      philosopher: {
+        ...choice.philosopher,
+        sepSlug: sep?.url?.match(/\/entries\/([a-z0-9-]+)\/?/i)?.[1] || choice.philosopher.sepSlug,
+        sepUrl: written.sepUrl,
+        sepTitle: written.sepTitle,
+        intro: written.intro,
+        mainIdeas: written.mainIdeas,
+        relation: written.relation,
+        sourceStatus: written.sourceStatus,
+      },
+      createdAt: now(),
+    }
+    await weekly.put(key, record)
+    return record
+  }
+
+  async function ensureWeekly() {
+    const existing = weekly.get(weekKey())
+    if (existing) return existing
+    if (weeklyJob) return weeklyJob
+    weeklyJob = generateWeekly().finally(() => {
+      weeklyJob = null
+    })
+    return weeklyJob
+  }
   async function handle(req, res) {
     const url = new URL(req.url || '/', 'http://localhost')
     const path = url.pathname
@@ -1220,6 +1471,26 @@ export async function apply(ctx) {
           remap: body.remap === true,
         })
         sendJson(res, 200, { ok: true, ...result })
+        return
+      }
+
+      if (req.method === 'POST' && path === `${API_BASE}/favorites`) {
+        const body = await readJson(req)
+        await addFavorite(oneLine(body.kind, 20), oneLine(body.termId, 80))
+        sendJson(res, 200, { ok: true, state: buildState() })
+        return
+      }
+
+      if (req.method === 'DELETE' && path.startsWith(`${API_BASE}/favorites/`)) {
+        const key = decodeURIComponent(path.slice(`${API_BASE}/favorites/`.length))
+        await favorites.delete(key)
+        sendJson(res, 200, { ok: true, state: buildState() })
+        return
+      }
+
+      if (req.method === 'POST' && path === `${API_BASE}/weekly`) {
+        await ensureWeekly()
+        sendJson(res, 200, { ok: true, state: buildState() })
         return
       }
 

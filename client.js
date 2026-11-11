@@ -112,6 +112,26 @@ window.__ModuleLoader__.load({
         'library.deleteBook': '删除这本书',
         'library.selectHint': '从左侧选择一本书。',
         'library.titleRequired': '书名不能为空。',
+        'favorites.kicker': 'FAVORITES',
+        'favorites.title': '收藏夹',
+        'favorites.count': '{n} 个',
+        'favorites.empty': '还没有收藏。词条和每日一词右上角的星标可以收藏。',
+        'favorites.remove': '取消收藏',
+        'favorites.term': '词条',
+        'favorites.daily': '每日一词',
+        'favorites.openTerm': '打开词条',
+        'favorite.add': '收藏',
+        'favorite.remove': '取消收藏',
+        'weekly.kicker': 'WEEKLY',
+        'weekly.title': '本周推荐',
+        'weekly.subtitle': '一本书，一位哲学家。',
+        'weekly.empty': '根据你的阅读与评价，每周推荐一本书和一位哲学家。',
+        'weekly.generate': '生成本周推荐',
+        'weekly.generating': '正在挑选本周的书与哲学家',
+        'weekly.book': '本周之书',
+        'weekly.philosopher': '本周哲学家',
+        'weekly.open': '展开阅读',
+        'weekly.mainIdeas': '主要思想',
         'rail.daily': '今日',
         'notice.existing': '这本书已经在你的词谱里，已为你打开。',
         'notice.rated': '已记录。',
@@ -211,6 +231,26 @@ window.__ModuleLoader__.load({
         'library.deleteBook': 'Delete this book',
         'library.selectHint': 'Choose a book on the left.',
         'library.titleRequired': 'The title cannot be empty.',
+        'favorites.kicker': 'FAVORITES',
+        'favorites.title': 'Favorites',
+        'favorites.count': '{n}',
+        'favorites.empty': 'Nothing saved yet. Use the star on a term or the daily word to save it.',
+        'favorites.remove': 'Remove from favorites',
+        'favorites.term': 'Term',
+        'favorites.daily': 'Daily word',
+        'favorites.openTerm': 'Open term',
+        'favorite.add': 'Save to favorites',
+        'favorite.remove': 'Remove from favorites',
+        'weekly.kicker': 'WEEKLY',
+        'weekly.title': 'This week',
+        'weekly.subtitle': 'One book, one philosopher.',
+        'weekly.empty': 'A book and a philosopher chosen from your reading and ratings, once a week.',
+        'weekly.generate': 'Generate this week’s picks',
+        'weekly.generating': 'Choosing this week’s book and philosopher',
+        'weekly.book': 'Book of the week',
+        'weekly.philosopher': 'Philosopher of the week',
+        'weekly.open': 'Read the picks',
+        'weekly.mainIdeas': 'Main ideas',
         'rail.daily': 'Today',
         'notice.existing': 'This book is already in your lexicon; it has been opened for you.',
         'notice.rated': 'Saved.',
@@ -232,6 +272,9 @@ window.__ModuleLoader__.load({
       refresh: [
         ['path', { d: 'M20 11a8 8 0 1 0-2.3 5.7' }],
         ['path', { d: 'M20 4v7h-7' }],
+      ],
+      star: [
+        ['path', { d: 'm12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3Z' }],
       ],
       link: [
         ['path', { d: 'M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1' }],
@@ -324,6 +367,18 @@ window.__ModuleLoader__.load({
         .replace(/^-+|-+$/g, '')
       if (ascii) return ascii
       return `zh:${String(ref?.termZh || '').trim().toLowerCase()}`
+    }
+
+    function termFavoriteKey(term) {
+      return `term:${term?.id || ''}`
+    }
+
+    function dailyFavoriteKey(daily) {
+      return `daily:${daily?.date || ''}:${String(daily?.termEn || '').toLowerCase()}`
+    }
+
+    function isFavorited(state, key) {
+      return Boolean(key) && Boolean(state?.favorites?.some((favorite) => favorite.key === key))
     }
 
     function uniqueConcepts(list, mainTerm) {
@@ -473,7 +528,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function TermCard({ term, index, onRate, busy, onConcept }) {
+    function TermCard({ term, index, onRate, busy, onConcept, isFavorite, onFavorite, favoriteBusy }) {
       const characters = charCount(term.definition)
       const mentions = mentionConcepts(term)
       const related = relatedConcepts(term)
@@ -490,6 +545,12 @@ window.__ModuleLoader__.load({
             { className: `phil-source ${term.sourceStatus === 'sep' ? 'is-sep' : ''}` },
             term.sourceStatus === 'sep' ? translate('term.sep') : translate('term.fallback'),
           ),
+          h(StarButton, {
+            active: isFavorite,
+            busy: favoriteBusy,
+            label: isFavorite ? translate('favorite.remove') : translate('favorite.add'),
+            onClick: () => onFavorite(term),
+          }),
         ),
         h(
           'h3',
@@ -949,6 +1010,141 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function StarButton({ active, busy, onClick, label }) {
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: `phil-star ${active ? 'is-active' : ''}`,
+          'aria-pressed': active,
+          'aria-label': label,
+          title: label,
+          disabled: busy,
+          onClick,
+        },
+        h(
+          'svg',
+          {
+            width: 15,
+            height: 15,
+            viewBox: '0 0 24 24',
+            fill: active ? 'currentColor' : 'none',
+            stroke: 'currentColor',
+            strokeWidth: 1.6,
+            strokeLinejoin: 'round',
+            'aria-hidden': true,
+          },
+          h('path', { d: 'm12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3Z' }),
+        ),
+      )
+    }
+
+    function FavoritesDialog({ state, busy, onRemove, onOpenTerm, onClose }) {
+      const closeRef = React.useRef(null)
+      const closeHandler = React.useRef(onClose)
+      closeHandler.current = onClose
+      React.useEffect(() => {
+        closeRef.current?.focus()
+        const onKeyDown = (event) => {
+          if (event.key === 'Escape') closeHandler.current()
+        }
+        window.addEventListener('keydown', onKeyDown)
+        return () => window.removeEventListener('keydown', onKeyDown)
+      }, [])
+
+      return h(
+        'div',
+        {
+          className: 'phil-modal-backdrop',
+          onMouseDown: (event) => {
+            if (event.target === event.currentTarget) onClose()
+          },
+        },
+        h(
+          'div',
+          {
+            className: 'phil-modal phil-favorites-modal',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-labelledby': 'phil-favorites-title',
+          },
+          h(
+            'div',
+            { className: 'phil-modal-head' },
+            h(
+              'div',
+              { className: 'phil-modal-kicker' },
+              h('span', { className: 'phil-kicker' }, translate('favorites.kicker')),
+              h('span', { className: 'phil-chip' }, translate('favorites.count', { n: state.favorites.length })),
+            ),
+            h(
+              'div',
+              { className: 'phil-modal-actions' },
+              h(
+                'button',
+                {
+                  ref: closeRef,
+                  type: 'button',
+                  className: 'phil-modal-close',
+                  onClick: onClose,
+                  'aria-label': translate('concept.close'),
+                  title: translate('concept.close'),
+                },
+                '×',
+              ),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'phil-favorites-body' },
+            h('h2', { id: 'phil-favorites-title', className: 'phil-favorites-heading' }, translate('favorites.title')),
+            state.favorites.length === 0
+              ? h('div', { className: 'phil-books-empty' }, h('p', null, translate('favorites.empty')))
+              : state.favorites.map((favorite) =>
+                  h(
+                    'article',
+                    { className: 'phil-favorite-card', key: favorite.key },
+                    h(
+                      'div',
+                      { className: 'phil-favorite-top' },
+                      h(
+                        'div',
+                        { className: 'phil-favorite-badges' },
+                        h('span', { className: 'phil-chip' }, favorite.kind === 'daily' ? translate('favorites.daily') : translate('favorites.term')),
+                        favorite.sourceBook ? h('span', { className: 'phil-favorite-source' }, favorite.sourceBook) : null,
+                      ),
+                      h(StarButton, {
+                        active: true,
+                        busy,
+                        label: translate('favorites.remove'),
+                        onClick: () => onRemove(favorite.key),
+                      }),
+                    ),
+                    h(
+                      'h3',
+                      { className: 'phil-favorite-title' },
+                      favorite.title,
+                      h('span', null, favorite.termEn || ''),
+                    ),
+                    h('p', { className: 'phil-favorite-definition' }, favorite.definition),
+                    favorite.kind === 'term' && state.books.some((book) => book.terms.some((term) => term.id === favorite.refId))
+                      ? h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'phil-modal-text-button phil-favorite-open',
+                            onClick: () => onOpenTerm(favorite),
+                          },
+                          translate('favorites.openTerm'),
+                        )
+                      : null,
+                  ),
+                ),
+          ),
+        ),
+      )
+    }
+
     function Stat({ label, value, tone }) {
       return h(
         'div',
@@ -958,7 +1154,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function DailyCard({ state, loading, rerolling, onGenerate, onReroll, onConcept }) {
+    function DailyCard({ state, loading, rerolling, onGenerate, onReroll, onConcept, isFavorite, onFavorite, favoriteBusy }) {
       const daily = state.daily
       const cardRef = React.useRef(null)
       const scrollRef = React.useRef(null)
@@ -994,6 +1190,14 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'phil-daily-head-actions' },
+            daily
+              ? h(StarButton, {
+                  active: isFavorite,
+                  busy: favoriteBusy,
+                  label: isFavorite ? translate('favorite.remove') : translate('favorite.add'),
+                  onClick: onFavorite,
+                })
+              : null,
             daily
               ? h(
                   'button',
@@ -1138,6 +1342,177 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function WeeklyCard({ state, loading, onGenerate, onOpen }) {
+      const weekly = state.weekly
+      return h(
+        'section',
+        { className: 'phil-card phil-weekly' },
+        h(
+          'div',
+          { className: 'phil-card-head' },
+          h(
+            'div',
+            null,
+            h('p', { className: 'phil-eyebrow' }, translate('weekly.kicker')),
+            h('h2', null, translate('weekly.title')),
+            h('p', { className: 'phil-card-sub' }, translate('weekly.subtitle')),
+          ),
+          h('span', { className: 'phil-weekly-mark', 'aria-hidden': true }, h(Icon, { name: 'book', size: 20 })),
+        ),
+        loading
+          ? h(
+              'div',
+              { className: 'phil-daily-loading', role: 'status', 'aria-live': 'polite' },
+              h('span', { className: 'phil-spinner' }),
+              h('p', null, translate('weekly.generating')),
+            )
+          : weekly
+            ? h(
+                'div',
+                { className: 'phil-weekly-preview' },
+                h(
+                  'div',
+                  { className: 'phil-weekly-row' },
+                  h('span', { className: 'phil-weekly-label' }, translate('weekly.book')),
+                  h('div', null, h('strong', null, weekly.book.title), h('span', null, weekly.book.author || '')),
+                ),
+                h(
+                  'div',
+                  { className: 'phil-weekly-row' },
+                  h('span', { className: 'phil-weekly-label' }, translate('weekly.philosopher')),
+                  h('div', null, h('strong', null, weekly.philosopher.name), h('span', null, weekly.philosopher.nameEn || '')),
+                ),
+                h(
+                  'button',
+                  { type: 'button', className: 'phil-weekly-open', onClick: onOpen },
+                  translate('weekly.open'),
+                  h(Icon, { name: 'arrow', size: 14 }),
+                ),
+              )
+            : h(
+                'div',
+                { className: 'phil-weekly-empty' },
+                h('p', null, translate('weekly.empty')),
+                h(
+                  'button',
+                  { type: 'button', className: 'phil-primary phil-daily-button', onClick: onGenerate },
+                  h(Icon, { name: 'spark', size: 16 }),
+                  translate('weekly.generate'),
+                ),
+              ),
+      )
+    }
+
+    function WeeklyDialog({ weekly, onClose }) {
+      const closeRef = React.useRef(null)
+      const closeHandler = React.useRef(onClose)
+      closeHandler.current = onClose
+      React.useEffect(() => {
+        closeRef.current?.focus()
+        const onKeyDown = (event) => {
+          if (event.key === 'Escape') closeHandler.current()
+        }
+        window.addEventListener('keydown', onKeyDown)
+        return () => window.removeEventListener('keydown', onKeyDown)
+      }, [])
+
+      if (!weekly) return null
+      return h(
+        'div',
+        {
+          className: 'phil-modal-backdrop',
+          onMouseDown: (event) => {
+            if (event.target === event.currentTarget) onClose()
+          },
+        },
+        h(
+          'div',
+          {
+            className: 'phil-modal phil-weekly-modal',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-labelledby': 'phil-weekly-title',
+          },
+          h(
+            'div',
+            { className: 'phil-modal-head' },
+            h(
+              'div',
+              { className: 'phil-modal-kicker' },
+              h('span', { className: 'phil-kicker' }, translate('weekly.kicker')),
+              h('span', { className: 'phil-chip' }, weekly.week || ''),
+            ),
+            h(
+              'button',
+              {
+                ref: closeRef,
+                type: 'button',
+                className: 'phil-modal-close',
+                onClick: onClose,
+                'aria-label': translate('concept.close'),
+                title: translate('concept.close'),
+              },
+              '×',
+            ),
+          ),
+          h(
+            'div',
+            { className: 'phil-weekly-body' },
+            h(
+              'section',
+              { className: 'phil-weekly-section' },
+              h('p', { className: 'phil-eyebrow' }, translate('weekly.book')),
+              h('h2', { id: 'phil-weekly-title' }, weekly.book.title),
+              h('p', { className: 'phil-modal-en' }, [weekly.book.author, weekly.book.tradition].filter(Boolean).join(' · ')),
+              weekly.book.why ? h('p', { className: 'phil-weekly-why' }, weekly.book.why) : null,
+              h('p', { className: 'phil-definition' }, weekly.book.summary),
+            ),
+            h(
+              'section',
+              { className: 'phil-weekly-section' },
+              h('p', { className: 'phil-eyebrow' }, translate('weekly.philosopher')),
+              h('h2', null, weekly.philosopher.name),
+              h('p', { className: 'phil-modal-en' }, weekly.philosopher.nameEn || ''),
+              h(
+                'div',
+                { className: 'phil-weekly-source-row' },
+                h(
+                  'span',
+                  { className: `phil-source ${weekly.philosopher.sourceStatus === 'sep' ? 'is-sep' : ''}` },
+                  weekly.philosopher.sourceStatus === 'sep' ? translate('term.sep') : translate('term.fallback'),
+                ),
+                weekly.philosopher.sepUrl
+                  ? h(
+                      'a',
+                      { className: 'phil-sep-link', href: weekly.philosopher.sepUrl, target: '_blank', rel: 'noreferrer noopener' },
+                      h(Icon, { name: 'link', size: 14 }),
+                      weekly.philosopher.sepTitle || translate('term.openSep'),
+                    )
+                  : null,
+              ),
+              weekly.philosopher.why ? h('p', { className: 'phil-weekly-why' }, weekly.philosopher.why) : null,
+              h('p', { className: 'phil-definition' }, weekly.philosopher.intro),
+              weekly.philosopher.mainIdeas?.length
+                ? h(
+                    'div',
+                    { className: 'phil-weekly-ideas' },
+                    h('span', { className: 'phil-keywords-label' }, translate('weekly.mainIdeas')),
+                    h(
+                      'ul',
+                      null,
+                      weekly.philosopher.mainIdeas.map((idea, index) => h('li', { key: `${idea}-${index}` }, idea)),
+                    ),
+                  )
+                : null,
+              weekly.philosopher.relation
+                ? h('p', { className: 'phil-weekly-relation' }, weekly.philosopher.relation)
+                : null,
+            ),
+          ),
+        ),
+      )
+    }
+
     function HowItWorks() {
       const steps = [
         ['empty.step1.title', 'empty.step1.body'],
@@ -1194,8 +1569,10 @@ window.__ModuleLoader__.load({
       .phil-top-actions {
         display: flex;
         align-items: center;
+        justify-content: flex-end;
         gap: 10px;
         flex: none;
+        flex-wrap: wrap;
       }
       .phil-top-button {
         display: inline-flex;
@@ -1228,6 +1605,27 @@ window.__ModuleLoader__.load({
         font-size: 9.5px;
         font-variant-numeric: tabular-nums;
       }
+      .phil-star {
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 27px;
+        height: 27px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--dsw-alias-label-secondary);
+        cursor: pointer;
+        opacity: 0.68;
+        transition: color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+      }
+      .phil-star:hover:not(:disabled) {
+        opacity: 1;
+        color: var(--dsw-alias-brand-primary);
+        background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent);
+      }
+      .phil-star.is-active { opacity: 1; color: var(--dsw-alias-brand-primary); }
+      .phil-star:disabled { opacity: 0.4; cursor: default; }
       .phil-kicker, .phil-eyebrow {
         margin: 0;
         font-size: 10px;
@@ -1414,6 +1812,71 @@ window.__ModuleLoader__.load({
         margin: 5px 0 0;
         font-size: 11.5px;
         line-height: 1.6;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .phil-weekly {
+        border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 55%, var(--dsw-alias-border-l1));
+      }
+      .phil-weekly-mark {
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        color: var(--dsw-alias-label-secondary);
+        background: var(--dsw-alias-bg-layer-2);
+      }
+      .phil-weekly-preview { margin-top: 14px; }
+      .phil-weekly-row {
+        display: grid;
+        grid-template-columns: 52px minmax(0, 1fr);
+        gap: 8px;
+        align-items: baseline;
+        padding: 7px 0;
+        border-top: 1px solid var(--dsw-alias-border-l1);
+      }
+      .phil-weekly-row:first-child { border-top: 0; }
+      .phil-weekly-label {
+        font-size: 9.5px;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        color: var(--dsw-alias-brand-primary);
+      }
+      .phil-weekly-row strong {
+        display: block;
+        font-size: 12px;
+        line-height: 1.45;
+        font-weight: 580;
+      }
+      .phil-weekly-row div span {
+        display: block;
+        margin-top: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 10px;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .phil-weekly-open {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 9px;
+        border: 0;
+        background: transparent;
+        color: var(--dsw-alias-brand-primary);
+        font: inherit;
+        font-size: 11px;
+        padding: 3px 0;
+        cursor: pointer;
+      }
+      .phil-weekly-open:hover { text-decoration: underline; }
+      .phil-weekly-empty { margin-top: 13px; }
+      .phil-weekly-empty p {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.75;
         color: var(--dsw-alias-label-secondary);
       }
       .phil-daily {
@@ -2186,6 +2649,133 @@ window.__ModuleLoader__.load({
       }
       .phil-books-empty h2 { margin: 0 0 8px; color: var(--dsw-alias-label-primary); font-size: 20px; }
       .phil-books-empty p { margin: 0; font-size: 12.5px; line-height: 1.7; }
+      .phil-favorites-modal { width: min(780px, 100%); }
+      .phil-favorites-body {
+        max-height: min(74vh, 820px);
+        overflow: auto;
+        padding: 22px 24px 26px;
+      }
+      .phil-favorites-heading {
+        margin: 0 0 14px;
+        font-family: ui-serif, Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+        font-size: 24px;
+        font-weight: 560;
+      }
+      .phil-favorite-card {
+        border: 1px solid var(--dsw-alias-border-l1);
+        border-radius: 13px;
+        background: var(--dsw-alias-bg-layer-1);
+        padding: 14px 15px 13px;
+        margin-top: 10px;
+      }
+      .phil-favorite-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .phil-favorite-badges {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+      .phil-favorite-source {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 10px;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .phil-favorite-title {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 9px 0 0;
+        font-family: ui-serif, Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+        font-size: 21px;
+        font-weight: 560;
+      }
+      .phil-favorite-title span {
+        font-family: ui-serif, Georgia, serif;
+        font-size: 11px;
+        font-style: italic;
+        font-weight: 400;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .phil-favorite-definition {
+        max-height: 190px;
+        overflow: auto;
+        margin: 9px 0 0;
+        padding-right: 5px;
+        font-size: 12.5px;
+        line-height: 1.85;
+        color: var(--dsw-alias-label-secondary);
+        white-space: pre-wrap;
+      }
+      .phil-favorite-open {
+        margin-top: 7px;
+        padding-left: 0;
+        color: var(--dsw-alias-brand-primary);
+      }
+      .phil-weekly-modal { width: min(800px, 100%); }
+      .phil-weekly-body {
+        max-height: min(76vh, 860px);
+        overflow: auto;
+        padding: 24px 27px 28px;
+      }
+      .phil-weekly-section h2 {
+        margin: 5px 0 0;
+        font-family: ui-serif, Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+        font-size: 28px;
+        font-weight: 560;
+        line-height: 1.2;
+      }
+      .phil-weekly-section + .phil-weekly-section {
+        margin-top: 25px;
+        padding-top: 22px;
+        border-top: 1px solid var(--dsw-alias-border-l1);
+      }
+      .phil-weekly-why {
+        margin: 10px 0 0;
+        padding: 9px 11px;
+        border-left: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);
+        background: color-mix(in srgb, var(--dsw-alias-brand-primary) 6%, transparent);
+        border-radius: 0 8px 8px 0;
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .phil-weekly-source-row {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .phil-weekly-ideas {
+        margin-top: 16px;
+      }
+      .phil-weekly-ideas ul {
+        margin: 7px 0 0;
+        padding-left: 18px;
+      }
+      .phil-weekly-ideas li {
+        margin: 4px 0;
+        font-size: 12.5px;
+        line-height: 1.75;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .phil-weekly-relation {
+        margin: 15px 0 0;
+        padding-top: 12px;
+        border-top: 1px solid var(--dsw-alias-border-l1);
+        font-size: 12px;
+        line-height: 1.75;
+        color: var(--dsw-alias-label-secondary);
+      }
       @media (max-width: 760px) {
         .phil-books-body {
           grid-template-columns: 1fr;
@@ -2214,6 +2804,8 @@ window.__ModuleLoader__.load({
         .phil-top-actions { width: 100%; justify-content: space-between; }
         .phil-daily-scroll { max-height: 260px; }
         .phil-search { grid-template-columns: 1fr; }
+        .phil-favorites-body, .phil-weekly-body { padding: 17px 16px 21px; }
+        .phil-weekly-section h2 { font-size: 24px; }
         .phil-field + .phil-field { border-left: 0; border-top: 1px solid var(--dsw-alias-border-l1); }
         .phil-term { padding: 17px 15px 14px; }
         .phil-term-foot { align-items: flex-start; }
@@ -2244,6 +2836,10 @@ window.__ModuleLoader__.load({
       const [bookForm, setBookForm] = React.useState(EMPTY_BOOK_FORM)
       const [bookSaving, setBookSaving] = React.useState(false)
       const [bookError, setBookError] = React.useState(null)
+      const [favoritesOpen, setFavoritesOpen] = React.useState(false)
+      const [favoriteBusy, setFavoriteBusy] = React.useState(false)
+      const [weeklyOpen, setWeeklyOpen] = React.useState(false)
+      const [weeklyLoading, setWeeklyLoading] = React.useState(false)
       const inputRef = React.useRef(null)
       const conceptCache = React.useRef(new Map())
       const mentionRequested = React.useRef(new Set())
@@ -2391,6 +2987,49 @@ window.__ModuleLoader__.load({
         if (!editBookId) return
         setSelectedId(editBookId)
         closeBooksDialog()
+      }
+
+      async function toggleFavorite(kind, ref) {
+        if (favoriteBusy) return
+        const key = ref?.key || (kind === 'term' ? termFavoriteKey(ref) : dailyFavoriteKey(ref))
+        const active = isFavorited(state, key)
+        setFavoriteBusy(true)
+        setError(null)
+        try {
+          const payload = active
+            ? await request(`/favorites/${encodeURIComponent(key)}`, { method: 'DELETE' })
+            : await request('/favorites', {
+                method: 'POST',
+                body: JSON.stringify({ kind, termId: kind === 'term' ? ref.id : '' }),
+              })
+          setState(payload.state)
+        } catch (caught) {
+          setError(caught.message)
+        } finally {
+          setFavoriteBusy(false)
+        }
+      }
+
+      function openFavoriteTerm(favorite) {
+        const book = state?.books.find((item) => item.terms.some((term) => term.id === favorite.refId))
+        if (!book) return
+        setSelectedId(book.id)
+        setFavoritesOpen(false)
+      }
+
+      async function generateWeekly() {
+        if (weeklyLoading) return
+        setWeeklyLoading(true)
+        setError(null)
+        try {
+          const payload = await request('/weekly', { method: 'POST', body: '{}' })
+          setState(payload.state)
+          setWeeklyOpen(true)
+        } catch (caught) {
+          setError(caught.message)
+        } finally {
+          setWeeklyLoading(false)
+        }
       }
 
       function openConcept(ref, sourceTerm, options = {}) {
@@ -2574,6 +3213,19 @@ window.__ModuleLoader__.load({
                   translate('library.title'),
                   h('span', { className: 'phil-top-count' }, String(state?.books.length || 0)),
                 ),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'phil-top-button',
+                    onClick: () => setFavoritesOpen(true),
+                    disabled: !state,
+                    'aria-label': translate('favorites.title'),
+                  },
+                  h(Icon, { name: 'star', size: 14 }),
+                  translate('favorites.title'),
+                  h('span', { className: 'phil-top-count' }, String(state?.favorites?.length || 0)),
+                ),
                 h('span', { className: 'phil-date' }, state?.today || ''),
               ),
             ),
@@ -2701,6 +3353,9 @@ window.__ModuleLoader__.load({
                               onRate: rate,
                               busy: ratingBusy,
                               onConcept: openConcept,
+                              isFavorite: isFavorited(state, termFavoriteKey(term)),
+                              onFavorite: (item) => toggleFavorite('term', item),
+                              favoriteBusy,
                             }),
                           ),
                         ),
@@ -2717,6 +3372,17 @@ window.__ModuleLoader__.load({
                     onGenerate: drawDaily,
                     onReroll: rerollDaily,
                     onConcept: openConcept,
+                    isFavorite: state.daily ? isFavorited(state, dailyFavoriteKey(state.daily)) : false,
+                    onFavorite: () => {
+                      if (state.daily) toggleFavorite('daily', state.daily)
+                    },
+                    favoriteBusy,
+                  }),
+                  h(WeeklyCard, {
+                    state,
+                    loading: weeklyLoading,
+                    onGenerate: generateWeekly,
+                    onOpen: () => setWeeklyOpen(true),
                   }),
                   h(ProfileCard, { state }),
                 ),
@@ -2747,6 +3413,24 @@ window.__ModuleLoader__.load({
               onDelete: deleteBookFromDialog,
               onOpen: openBookFromDialog,
               onClose: closeBooksDialog,
+            })
+          : null,
+        favoritesOpen && state
+          ? h(FavoritesDialog, {
+              state,
+              busy: favoriteBusy,
+              onRemove: (key) => {
+                const favorite = state.favorites.find((item) => item.key === key)
+                if (favorite) toggleFavorite(favorite.kind, favorite)
+              },
+              onOpenTerm: openFavoriteTerm,
+              onClose: () => setFavoritesOpen(false),
+            })
+          : null,
+        weeklyOpen && state?.weekly
+          ? h(WeeklyDialog, {
+              weekly: state.weekly,
+              onClose: () => setWeeklyOpen(false),
             })
           : null,
       )
